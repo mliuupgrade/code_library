@@ -12,9 +12,12 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from docx import Document
+import warnings
+warnings.filterwarnings('ignore')
 
-def bad_rate_by_var_to_doc(dev_df, cols_to_include,r_var, output_dir, max_length=20):
-#export tables for all used variables to a work file with each table formatted and saved as a plot
+def bad_rate_by_var_to_doc(dev_df, cols_to_include,r_var, score, output_dir, max_length=20):
+#export tables for all used variables to a word file with each table formatted and saved as a plot
+#calculate the bad rate and average score distribution by variable
 #dev_df: the dataframe where the bad rate by variable is calculated
 #cols_to_include: variables included for the calculation
 #r_var: response variable, such as 'bk_18'
@@ -35,9 +38,10 @@ def bad_rate_by_var_to_doc(dev_df, cols_to_include,r_var, output_dir, max_length
     
     for var in cols_to_include:    
     #    var='s114s'
-        df_var=dev_df[[r_var,var]]
+        df_var=dev_df[[r_var,score, var]]
+        print(var)
         
-        if df_var[var].min()<-20:
+        if df_var[var].min() < -20:
             df_var['bin_labels'], bin_edges = pd.qcut(df_var[var], q=10, labels=False, retbins=True, duplicates='drop')
             bin_edges_rounded = np.round(bin_edges, 3)
             df_var[var] = df_var['bin_labels'].apply(lambda x: f"({bin_edges_rounded[x]} , {bin_edges_rounded[x+1]}]")
@@ -78,13 +82,16 @@ def bad_rate_by_var_to_doc(dev_df, cols_to_include,r_var, output_dir, max_length
             df = pd.concat([non_positive_values,positive_values])
         
         count_by_bin=df[[var,'bin_labels']].value_counts()
+        mean_by_bin = df.groupby([var,'bin_labels'])[score].mean()
         sum_by_bin = df.groupby([var,'bin_labels'])[r_var].sum()
         
-        df_sum=pd.concat([count_by_bin, sum_by_bin], axis=1).reset_index(level=var)
-        df_sum = df_sum.rename(columns={'count': 'Records', r_var: 'Bads'})
+        df_sum=pd.concat([count_by_bin, sum_by_bin, mean_by_bin], axis=1).reset_index(level=var)
+        df_sum = df_sum.rename(columns={'count': 'Records', r_var: 'Bads', score:'Average Score'})
         df_sum['Bad Rate']=(df_sum['Bads']/df_sum['Records'])* 100  # Multiply by 100 to get percentage
         df_sum['Bad Rate'] = df_sum['Bad Rate'].apply(lambda x: f"{x:.2f}%")
-        df_sum.index = df_sum.index.astype(float).astype(int)
+        df_sum['Average Score'] = df_sum['Average Score'].apply(lambda x: f"{x:.4f}")
+        df_sum=df_sum[[var, 'Records', 'Bads', 'Bad Rate', 'Average Score']]
+        df_sum.index = df_sum.index.astype(float)
         df_sum=df_sum.sort_index()
         if df_sum[var].iloc[0].startswith('('):
             df_sum[var].iloc[0] = '[' + df_sum[var].iloc[0][1:]
@@ -142,7 +149,8 @@ def bad_rate_by_var_to_doc(dev_df, cols_to_include,r_var, output_dir, max_length
             # Add the actual column values (skip the index)
     #        for j, value in enumerate(row):
     #            row_cells[j].text = str(value)
-    
-    
     # Save the document
-    doc.save(output_dir+'bad_by_var.docx')
+    doc.save(output_dir+'bad_rate_score_by_var.docx')
+    
+    
+bad_rate_by_var_to_doc(dev_df, sk_clf_run_40_cols,'bad_60+','arm1_score', output_dir, max_length=20)
